@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -6,6 +7,7 @@ import requests
 from PIL import Image
 from io import BytesIO
 from difflib import get_close_matches
+import pyimgur
 
 def format_price(price):
     """Format price with currency symbol."""
@@ -431,13 +433,24 @@ def format_db_results_for_display(df):
     return result
 
 def validate_image_url(url):
-    """Validate if a URL points to a valid image."""
+    """Validate if a URL points to a valid image or if it's a valid local file path."""
     try:
         # Check if URL is empty
         if not url:
             return False, "Image URL cannot be empty"
             
-        # Check file extension
+        # Handle local file paths
+        if url.startswith('static/'):
+            file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), url)
+            if os.path.exists(file_path):
+                try:
+                    with Image.open(file_path) as img:
+                        return True, None
+                except:
+                    return False, "Invalid image format"
+            return False, "File not found"
+            
+        # For URLs, check file extension
         valid_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
         has_valid_extension = any(url.lower().endswith(ext) for ext in valid_extensions)
         if not has_valid_extension:
@@ -461,6 +474,91 @@ def validate_image_url(url):
             return False, f"Network error: {str(e)}"
     except Exception as e:
         return False, str(e)
+
+def upload_image_to_imgur(image_file):
+    """Upload an image to Imgur and return the URL."""
+    try:
+        imgur_client_id = st.secrets.get("imgur_client_id")
+        if not imgur_client_id or imgur_client_id == "YOUR_IMGUR_CLIENT_ID":
+            st.error("Please set up your Imgur client ID in secrets.toml")
+            return None, "Imgur client ID not configured"
+            
+        im = pyimgur.Imgur(imgur_client_id)
+        
+        # Read the file into memory
+        image_bytes = image_file.getvalue()
+        
+        # Upload to Imgur
+        uploaded_image = im.upload_image(BytesIO(image_bytes), title="Garment Image")
+        return uploaded_image.link, None
+        
+    except Exception as e:
+        return None, f"Error uploading image: {str(e)}"
+
+def save_uploaded_image(image_file):
+    """Save an uploaded image to local storage and return the file path."""
+    if image_file is None:
+        return None, "No image file provided"
+        
+    try:
+        import os
+        from pathlib import Path
+        import shutil
+        
+        # Create images directory if it doesn't exist
+        static_dir = Path(__file__).parent / "static"
+        image_dir = static_dir / "images"
+        os.makedirs(image_dir, exist_ok=True)
+        
+        # Generate unique filename
+        import uuid
+        file_extension = os.path.splitext(image_file.name)[1].lower()
+        if not file_extension:
+            file_extension = '.png'  # Default to .png if no extension
+        filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = image_dir / filename
+        
+        # Save the file using a temporary file approach for safety
+        temp_path = file_path.with_suffix('.temp')
+        try:
+            with open(temp_path, "wb") as f:
+                # Read in chunks for large files
+                CHUNK_SIZE = 8192
+                file_content = image_file.getvalue()
+                for i in range(0, len(file_content), CHUNK_SIZE):
+                    chunk = file_content[i:i + CHUNK_SIZE]
+                    f.write(chunk)
+                f.flush()
+                os.fsync(f.fileno())
+            
+            # Verify the temp file was written correctly
+            if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
+                raise IOError("Failed to write temporary file")
+            
+            # Move the temp file to the final location
+            shutil.move(str(temp_path), str(file_path))
+            
+            # Double check the final file exists
+            if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                raise IOError("Failed to save image file")
+            
+            # Return relative path for database storage (always use forward slashes)
+            relative_path = str(Path("static") / "images" / filename).replace("\\", "/")
+            print(f"Successfully saved image to: {relative_path}")  # Debug print
+            return relative_path, None
+            
+        except Exception as e:
+            # Clean up temp file if it exists
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+            raise e
+            
+    except Exception as e:
+        print(f"Error saving image: {str(e)}")  # Debug print
+        return None, f"Error saving image: {str(e)}"
 
 
 

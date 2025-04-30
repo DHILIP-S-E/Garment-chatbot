@@ -3,9 +3,61 @@ import pandas as pd
 from db import GarmentDatabase
 import os
 from dotenv import load_dotenv
-from utils import validate_image_url
+from utils import validate_image_url, save_uploaded_image
 
 load_dotenv()
+
+def image_upload_modal(selected_id, db, garments_df):
+    """Display a modal for handling image uploads."""
+    with st.form(key=f"image_upload_form_{selected_id}"):
+        st.subheader("Upload New Image")
+        
+        # Use a unique key for each instance of file uploader
+        upload_key = f"uploader_{selected_id}"
+        uploaded_file = st.file_uploader(
+            "Choose an image file",
+            type=['png', 'jpg', 'jpeg', 'gif', 'webp'],
+            key=upload_key
+        )
+        
+        preview_col1, preview_col2 = st.columns([1, 1])
+        with preview_col1:
+            if uploaded_file:
+                st.image(uploaded_file, caption="New Image Preview", width=200)
+            else:
+                st.write("No new image selected")
+                
+        with preview_col2:
+            current_image = garments_df.loc[selected_id, 'image_url']
+            if current_image and current_image.startswith('static/'):
+                try:
+                    st.image(current_image, caption="Current Image", width=200)
+                except:
+                    st.image("https://placehold.co/200x200?text=Error+Loading+Image", width=200)
+            else:
+                st.image("https://placehold.co/200x200?text=No+Image", width=200)
+        
+        submit_button = st.form_submit_button("Save Image")
+        
+        if submit_button and uploaded_file:
+            with st.spinner("Saving image..."):
+                # Save the file locally
+                file_path, error = save_uploaded_image(uploaded_file)
+                if error:
+                    st.error(f"Error saving image: {error}")
+                    return False
+                else:
+                    # Update the database with new image URL
+                    success, error = db.update_image_url(selected_id, file_path)
+                    if success:
+                        st.success("✅ Image saved successfully!")
+                        # Use session state to signal reload instead of modifying widget state
+                        st.session_state['reload_required'] = True
+                        return True
+                    else:
+                        st.error(f"Error updating database: {error}")
+                        return False
+        return False
 
 def admin_page():
     st.title("👔 Garment Admin Panel")
@@ -48,34 +100,51 @@ def admin_page():
             
             description = st.text_area("Description", help="Detailed description of the garment")
             
-            # Image URL with live preview
+            # Image upload section
+            st.subheader("Product Image")
             image_col1, image_col2 = st.columns([2, 1])
             with image_col1:
-                image_url = st.text_input(
-                    "Image URL*", 
-                    help="Link to product image (must end with .jpg, .jpeg, .png, .gif, or .webp)"
+                uploaded_file = st.file_uploader(
+                    "Upload Product Image*", 
+                    type=['png', 'jpg', 'jpeg', 'gif', 'webp'],
+                    help="Upload product image (supported formats: PNG, JPG, JPEG, GIF, WEBP)"
                 )
+                if "last_uploaded_image" not in st.session_state:
+                    st.session_state.last_uploaded_image = None
+            
             with image_col2:
-                if image_url:
-                    is_valid, error_msg = validate_image_url(image_url)
-                    if is_valid:
-                        st.image(image_url, caption="Image Preview", width=200)
-                    else:
-                        st.error(error_msg)
-                        st.image("https://via.placeholder.com/200x200?text=Invalid+Image", width=200)
+                if uploaded_file:
+                    try:
+                        # Show preview of uploaded image
+                        st.image(uploaded_file, caption="Image Preview", width=200)
+                        # Save locally when file is selected
+                        if uploaded_file != st.session_state.last_uploaded_image:
+                            with st.spinner("Saving image..."):
+                                file_path, error = save_uploaded_image(uploaded_file)
+                                if error:
+                                    st.error(error)
+                                    file_path = None
+                                else:
+                                    st.success("Image saved successfully!")
+                                    st.session_state.last_uploaded_image = uploaded_file
+                                    st.session_state.current_image_url = file_path
+                    except Exception as e:
+                        st.error(f"Error processing image: {str(e)}")
+                        file_path = None
                 else:
-                    st.image("https://via.placeholder.com/200x200?text=No+Image", width=200)
+                    st.image("https://placehold.co/200x200?text=No+Image", width=200)
+                    file_path = None
             
             buy_link = st.text_input("Buy Link", help="Link to purchase the product")
             
             submit_button = st.form_submit_button("Add Garment")
             
             if submit_button:
-                if not all([name, category, fabric_type, sizes, price, image_url]):
+                if not all([name, category, fabric_type, sizes, price, file_path]):
                     st.error("Please fill in all required fields marked with *")
                 else:
                     # Validate image URL before saving
-                    is_valid, error_msg = validate_image_url(image_url)
+                    is_valid, error_msg = validate_image_url(file_path)
                     if not is_valid:
                         st.error(f"Invalid image URL: {error_msg}")
                     else:
@@ -88,7 +157,7 @@ def admin_page():
                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ''', (
                                 name, category, fabric_type, sizes, price, available,
-                                description, gender, season, image_url, buy_link, region, occasion
+                                description, gender, season, file_path, buy_link, region, occasion
                             ))
                             db.conn.commit()
                             st.success("Garment added successfully!")
@@ -102,31 +171,29 @@ def admin_page():
         st.header("Edit Existing Garments")
         
         # Search and filter options
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             search_term = st.text_input("Search garments", help="Search by name, category, or description")
         with col2:
             filter_category = st.selectbox("Filter by Category", ["All"] + db.get_all_categories())
+        with col3:
+            filter_occasion = st.selectbox("Filter by Occasion", ["All", "Wedding", "Festival", "Casual", "Formal", "Party"])
         
-        # Get and display garments
-        if search_term or filter_category != "All":
-            if filter_category != "All":
-                garments_df = db.get_garments_by_category(filter_category)
-                if search_term:
-                    garments_df = garments_df[
-                        garments_df['name'].str.contains(search_term, case=False) |
-                        garments_df['description'].str.contains(search_term, case=False)
-                    ]
-            else:
-                garments_df = db.search_garments(search_term)
-        else:
-            garments_df = db.get_all_garments()
+        # Always reload data from database
+        garments_df = db.get_all_garments() if not search_term else db.search_garments(search_term)
+
+        # Apply category filter
+        if filter_category != "All":
+            garments_df = garments_df[garments_df['category'] == filter_category]
+
+        # Apply occasion filter
+        if filter_occasion != "All":
+            garments_df = garments_df[garments_df['occasion'] == filter_occasion]
         
         if not garments_df.empty:
-            # Display as editable dataframe
+            # Display as editable dataframe with image upload support
             edited_df = st.data_editor(
-                garments_df,
-                hide_index=True,
+                garments_df.set_index('id'),
                 key="garment_editor",
                 disabled=["id"],
                 column_config={
@@ -147,12 +214,10 @@ def admin_page():
                         "In Stock",
                         help="Is the product available?"
                     ),
-                    "image_url": st.column_config.TextColumn(
-                        "Image URL",
-                        help="Product image URL (must end with .jpg, .jpeg, .png, .gif, or .webp)",
-                        required=True,
-                        max_chars=500,
-                        default=""
+                    "image_url": st.column_config.ImageColumn(
+                        "Product Image",
+                        help="Click to upload a new image or paste an image URL",
+                        width="medium"
                     ),
                     "buy_link": st.column_config.LinkColumn(
                         "Buy Link"
@@ -163,93 +228,115 @@ def admin_page():
                         max_chars=500,
                         width="large"
                     )
-                }
+                },
+                num_rows="dynamic"
             )
             
-            # Store edited data in session state
-            st.session_state.edited_data = edited_df
-            
-            # Display image previews
-            st.subheader("Image Previews")
-            preview_cols = st.columns(4)
-            
-            for i, (_, row) in enumerate(edited_df.iterrows()):
-                col = preview_cols[i % 4]
-                with col:
-                    with st.container():
-                        image_url = row['image_url']
-                        st.markdown(f"##### {row['name']}")
-                        
-                        if image_url:
-                            try:
-                                # Validate image URL
-                                is_valid, error_msg = validate_image_url(image_url)
-                                if is_valid:
-                                    st.image(image_url, use_container_width=True)
-                                    # Check if this is an updated image
-                                    if (garments_df is not None and 
-                                        row['id'] in garments_df.index and 
-                                        image_url != garments_df.loc[row['id'], 'image_url']):
-                                        st.caption("(Updated)")
-                                else:
-                                    st.error(f"Invalid image: {error_msg}")
-                                    st.image("https://placehold.co/300x400/lightgray/darkgray/png?text=Invalid+Image",
-                                           use_container_width=True)
-                            except Exception as e:
-                                st.error(f"Error loading image: {str(e)}")
-                                st.image("https://placehold.co/300x400/lightgray/darkgray/png?text=Error+Loading+Image",
-                                       use_container_width=True)
-                        else:
-                            st.image("https://placehold.co/300x400/lightgray/darkgray/png?text=No+Image",
-                                   use_container_width=True)
-            
             # Save changes button
-            if st.button("Save Changes", type="primary"):
-                try:
-                    changes = edited_df.compare(garments_df)
-                    if not changes.empty:
+            changes_detected = False
+            last_save_state = st.session_state.get('last_save_state', {})
+            
+            # Check for changes in the data editor
+            if not edited_df.equals(garments_df.set_index('id')):
+                changes_detected = True
+            
+            # Check for changes in uploaded files
+            if "last_uploaded_files" not in st.session_state:
+                st.session_state.last_uploaded_files = {}
+
+            # Save changes button with dynamic state
+            if st.button("Save Changes", type="primary", disabled=not changes_detected):
+                with st.spinner("Saving changes..."):
+                    try:
                         updates_made = False
                         error_count = 0
                         
-                        for idx in changes.index:
-                            row = edited_df.loc[idx]
-                            changed_fields = changes.xs(idx).index.get_level_values(0).unique()
-                            
-                            # Prepare updates
-                            updates = {
-                                field: row[field]
-                                for field in changed_fields
-                            }
-                            
-                            # Validate image URL if it was changed
-                            if 'image_url' in updates:
-                                is_valid, error_msg = validate_image_url(updates['image_url'])
-                                if not is_valid:
-                                    st.error(f"Invalid image URL for {row['name']}: {error_msg}")
-                                    error_count += 1
-                                    continue
-                            
-                            # Apply updates
-                            success, error = db.bulk_update_garment(row['id'], updates)
-                            if success:
-                                updates_made = True
-                            else:
-                                st.error(f"Error updating {row['name']}: {error}")
-                                error_count += 1
+                        # Handle data editor changes
+                        changes = edited_df.compare(garments_df.set_index('id'))
+                        if not changes.empty:
+                            for idx in changes.index:
+                                row = edited_df.loc[idx]
+                                changed_fields = changes.xs(idx).index.get_level_values(0).unique()
+                                
+                                # Prepare updates
+                                updates = {}
+                                for field in changed_fields:
+                                    new_value = row[field]
+                                    if field == 'image_url':
+                                        is_valid, error_msg = validate_image_url(new_value)
+                                        if not is_valid:
+                                            st.error(f"Invalid image URL for {row['name']}: {error_msg}")
+                                            error_count += 1
+                                            continue
+                                    updates[field] = new_value
+                                
+                                if updates:  # Only proceed if we have valid updates
+                                    try:
+                                        success, error = db.bulk_update_garment(idx, updates)
+                                        if success:
+                                            updates_made = True
+                                        else:
+                                            st.error(f"Error updating {row['name']}: {error}")
+                                            error_count += 1
+                                    except Exception as e:
+                                        st.error(f"Error updating {row['name']}: {str(e)}")
+                                        error_count += 1
                         
                         if updates_made:
                             if error_count == 0:
                                 st.success("All changes saved successfully!")
+                                # Update last save state
+                                st.session_state.last_save_state = edited_df.to_dict()
+                                # Clear any upload states
+                                st.session_state.last_uploaded_files = {}
                             else:
                                 st.warning(f"Some changes were saved, but {error_count} errors occurred.")
-                            st.rerun()
+                            st.rerun()  # Force UI refresh
                         else:
-                            st.error("No changes were saved due to errors.")
-                    else:
-                        st.info("No changes detected.")
-                        
-                except Exception as e:
-                    st.error(f"Error saving changes: {str(e)}")
+                            if error_count > 0:
+                                st.error("No changes were saved due to errors.")
+                            else:
+                                st.info("No changes detected to save.")
+                                
+                    except Exception as e:
+                        st.error(f"Error saving changes: {str(e)}")
+
+            # Update image upload modal section
+            st.divider()
+            st.subheader("Image Management")
+            image_col1, image_col2 = st.columns([3, 1])
+
+            with image_col1:
+                selected_id = st.selectbox(
+                    "Select Product to Update Image", 
+                    edited_df.index.tolist(),
+                    format_func=lambda x: f"{x}: {edited_df.loc[x, 'name']}"
+                )
+
+            with image_col2:
+                if st.button("📷 Upload Image", type="primary"):
+                    st.session_state.show_upload_modal = True
+                    st.session_state.selected_product_id = selected_id
+
+            # Show upload modal if triggered
+            if st.session_state.get("show_upload_modal", False):
+                modal_result = image_upload_modal(
+                    st.session_state.selected_product_id,
+                    db,
+                    edited_df
+                )
+                if modal_result:
+                    # Clear modal state and refresh
+                    del st.session_state.show_upload_modal
+                    st.rerun()
+
+            # Show current image
+            if selected_id:
+                current_image = edited_df.loc[selected_id, 'image_url']
+                if current_image and current_image.startswith('static/'):
+                    st.image(current_image, caption="Current Product Image", width=300)
+                else:
+                    st.image("https://placehold.co/300x400?text=No+Image", caption="No image available")
         else:
             st.info("No garments found. Add some garments using the 'Add New Garment' tab.")
 

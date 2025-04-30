@@ -9,6 +9,8 @@ from unittest.mock import patch, MagicMock
 class TestGarmentApp(unittest.TestCase):
     
     def setUp(self):
+        # Reset the singleton instance for each test
+        GarmentDatabase._instance = None
         # Create a temporary database for testing
         self.temp_db = tempfile.NamedTemporaryFile(suffix='.db').name
         self.db = GarmentDatabase(db_path=self.temp_db)
@@ -22,7 +24,7 @@ class TestGarmentApp(unittest.TestCase):
     
     def test_database_initialization(self):
         """Test that the database is properly initialized with sample data."""
-        garments = self.db.get_all_garments()
+        garments = self.db.get_all_garments(use_cache=False)
         self.assertGreater(len(garments), 0, "Database should be populated with sample data")
         
         categories = self.db.get_all_categories()
@@ -141,17 +143,17 @@ class TestGarmentApp(unittest.TestCase):
     
     def test_search_garments_function(self):
         """Test the search_garments function of the database."""
-        # Search for a specific garment type
-        dhoti_garments = self.db.search_garments("Dhoti")
-        self.assertGreater(len(dhoti_garments), 0, "Should find dhoti garments")
+        # Search for a specific garment type using category filter
+        dhoti_garments = self.db.get_garments_by_category("Dhoti")
+        self.assertGreater(len(dhoti_garments), 0, "Should find dhoti garments by category")
         
         # Verify that all returned garments are of the Dhoti category
         for _, garment in dhoti_garments.iterrows():
             self.assertEqual(garment["category"], "Dhoti", "All returned garments should be Dhotis")
         
-        # Search for a non-existent garment
-        nonexistent_garments = self.db.search_garments("Tuxedo")
-        self.assertEqual(len(nonexistent_garments), 0, "Should not find tuxedos in the database")
+        # Search for a non-existent category
+        nonexistent_garments = self.db.get_garments_by_category("Tuxedo")
+        self.assertEqual(len(nonexistent_garments), 0, "Should not find tuxedos in the database by category")
 
 if __name__ == "__main__":
     unittest.main()

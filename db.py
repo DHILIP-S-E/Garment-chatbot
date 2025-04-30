@@ -3,22 +3,68 @@ import os
 import pandas as pd
 
 class GarmentDatabase:
+    _instance = None
+    _cache = {}
+    
+    def __new__(cls, db_path="garment_database.db"):
+        if cls._instance is None:
+            cls._instance = super(GarmentDatabase, cls).__new__(cls)
+            cls._instance.db_path = db_path
+            cls._instance.conn = None
+            cls._instance.cursor = None
+            cls._instance.connect()
+            cls._instance.create_tables()
+        return cls._instance
+
     def __init__(self, db_path="garment_database.db"):
         """Initialize the database connection."""
         self.db_path = db_path
-        self.conn = None
-        self.cursor = None
-        self.connect()
-        self.create_tables()
-        
+
     def connect(self):
-        """Connect to the SQLite database."""
+        """Connect to the SQLite database with optimized settings."""
         try:
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn = sqlite3.connect(
+                self.db_path, 
+                check_same_thread=False,
+                isolation_level="IMMEDIATE",
+                timeout=30
+            )
+            # Performance optimizations
+            self.conn.execute("PRAGMA cache_size = -2000")  # Use 2MB of cache
+            self.conn.execute("PRAGMA temp_store = MEMORY")  # Store temp tables in memory
+            self.conn.execute("PRAGMA synchronous = NORMAL")  # Faster writes with good safety
+            self.conn.execute("PRAGMA journal_mode = WAL")  # Use Write-Ahead Logging
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            self.conn.execute("PRAGMA busy_timeout = 5000")
+            
             self.cursor = self.conn.cursor()
             print(f"Connected to database: {self.db_path}")
         except sqlite3.Error as e:
             print(f"Database connection error: {e}")
+            raise
+            
+    def reconnect_if_needed(self):
+        """Reconnect to database if connection was lost."""
+        try:
+            # Test connection
+            self.conn.execute("SELECT 1")
+        except (sqlite3.OperationalError, sqlite3.ProgrammingError):
+            print("Database connection lost, reconnecting...")
+            self.connect()
+            
+    def execute_with_retry(self, query, params=None, max_retries=3):
+        """Execute a query with automatic retry on connection failure."""
+        for attempt in range(max_retries):
+            try:
+                self.reconnect_if_needed()
+                if params is None:
+                    return self.cursor.execute(query)
+                return self.cursor.execute(query, params)
+            except sqlite3.Error as e:
+                if attempt == max_retries - 1:  # Last attempt
+                    raise
+                print(f"Database error, retrying... ({e})")
+                self.connect()  # Try to reconnect
             
     def close(self):
         """Close the database connection."""
@@ -211,40 +257,76 @@ class GarmentDatabase:
         except sqlite3.Error as e:
             print(f"Error populating sample data: {e}")
             
-    def get_all_garments(self):
-        """Retrieve all garments from the database."""
+    def _get_cached_query(self, query, params=None):
+        """Get cached query result if available."""
+        cache_key = f"{query}:{str(params)}"
+        cached_result = self._cache.get(cache_key)
+        # Check if cached result exists and is not None
+        if cached_result is not None:
+            if isinstance(cached_result, pd.DataFrame):
+                if not cached_result.empty:
+                    return cached_result
+            else:
+                return cached_result
+        return None
+
+    def _set_cached_query(self, query, params, result, timeout=300):
+        """Cache query result with timeout."""
+        if result is not None:
+            cache_key = f"{query}:{str(params)}"
+            self._cache[cache_key] = result
+            # Schedule cache cleanup after timeout
+            import threading
+            threading.Timer(timeout, lambda: self._cache.pop(cache_key, None)).start()
+
+    def get_all_garments(self, use_cache=True):
+        """Retrieve all garments from the database with optional caching."""
+        if use_cache:
+            cached = self._get_cached_query("SELECT * FROM garments")
+            if cached is not None:
+                return cached
+            
         try:
             query = "SELECT * FROM garments"
-            return pd.read_sql_query(query, self.conn)
+            df = pd.read_sql_query(query, self.conn)
+            if use_cache and not df.empty:
+                self._set_cached_query("SELECT * FROM garments", None, df)
+            return df
         except sqlite3.Error as e:
             print(f"Error retrieving garments: {e}")
             return pd.DataFrame()
-            
+
     def get_garments_by_category(self, category):
-        """Retrieve garments filtered by category."""
+        """Retrieve garments filtered by category with caching."""
+        cache_key = f"category_{category}"
+        cached = self._get_cached_query(cache_key)
+        if cached is not None:
+            return cached
+            
         try:
             query = "SELECT * FROM garments WHERE category = ?"
-            return pd.read_sql_query(query, self.conn, params=(category,))
+            df = pd.read_sql_query(query, self.conn, params=(category,))
+            if not df.empty:
+                self._set_cached_query(cache_key, (category,), df)
+            return df
         except sqlite3.Error as e:
             print(f"Error retrieving garments by category: {e}")
             return pd.DataFrame()
-            
+
     def search_garments(self, search_term):
-        """Search garments by various criteria."""
+        """Search garments with optimized query."""
         try:
             search_pattern = f"%{search_term}%"
+            # Use INDEXED columns for faster search
             query = """
             SELECT * FROM garments 
             WHERE name LIKE ? 
-            OR category LIKE ? 
-            OR fabric_type LIKE ? 
+            OR category LIKE ?
             OR description LIKE ?
-            OR gender LIKE ?
-            OR season LIKE ?
             """
-            params = (search_pattern, search_pattern, search_pattern, 
-                     search_pattern, search_pattern, search_pattern)
-            return pd.read_sql_query(query, self.conn, params=params)
+            params = (search_pattern, search_pattern, search_pattern)
+            df = pd.read_sql_query(query, self.conn, params=params)
+            return df
         except sqlite3.Error as e:
             print(f"Error searching garments: {e}")
             return pd.DataFrame()
@@ -273,7 +355,8 @@ class GarmentDatabase:
                 return self.get_all_garments()
                 
             query = f"SELECT * FROM garments WHERE {' AND '.join(conditions)}"
-            return pd.read_sql_query(query, self.conn, params=params)
+            df = pd.read_sql_query(query, self.conn, params=params)
+            return df
         except sqlite3.Error as e:
             print(f"Error retrieving garments by criteria: {e}")
             return pd.DataFrame()
@@ -291,7 +374,7 @@ class GarmentDatabase:
     def save_chat_history(self, user_message, bot_response):
         """Save chat interaction to history."""
         try:
-            self.cursor.execute('''
+            self.execute_with_retry('''
             INSERT INTO chat_history (user_message, bot_response)
             VALUES (?, ?)
             ''', (user_message, bot_response))
@@ -311,39 +394,112 @@ class GarmentDatabase:
     def update_garment(self, garment_id, field_name, new_value):
         """Update a single field for a specific garment."""
         try:
-            valid_fields = [
-                'name', 'category', 'fabric_type', 'sizes', 'price',
-                'available', 'description', 'gender', 'season',
-                'image_url', 'buy_link', 'region', 'occasion'
-            ]
-            
-            if field_name not in valid_fields:
-                raise ValueError(f"Invalid field name: {field_name}")
-            
-            # Special handling for image_url updates
             if field_name == 'image_url':
-                # Get current value
-                current_garment = self.get_garment_by_id(garment_id)
-                if current_garment is None:
-                    raise ValueError(f"No garment found with ID {garment_id}")
+                print(f"Updating image for garment {garment_id} with new path: {new_value}")  # Debug print
                 
-                # Only update if value has changed
-                if current_garment['image_url'] != new_value:
+                # Start a transaction
+                self.conn.execute("BEGIN EXCLUSIVE TRANSACTION")
+                
+                try:
+                    # Execute update
                     query = "UPDATE garments SET image_url = ? WHERE id = ?"
-                    self.cursor.execute(query, (new_value, garment_id))
+                    self.execute_with_retry(query, (new_value, garment_id))
+                    
+                    # Force commit the transaction
                     self.conn.commit()
-                    return True, None
-                return False, "No change in image URL"
+                    
+                    # Verify the update
+                    verify_query = "SELECT image_url FROM garments WHERE id = ?"
+                    self.cursor.execute(verify_query, (garment_id,))
+                    result = self.cursor.fetchone()
+                    
+                    if result and result[0] == new_value:
+                        print(f"Successfully verified image update for garment {garment_id}")  # Debug print
+                        return True, None
+                    else:
+                        print(f"Failed to verify image update for garment {garment_id}")  # Debug print
+                        return False, "Failed to verify update"
+                        
+                except Exception as e:
+                    self.conn.rollback()
+                    print(f"Error during image update: {str(e)}")  # Debug print
+                    return False, str(e)
             else:
                 # Handle other fields normally
                 query = f"UPDATE garments SET {field_name} = ? WHERE id = ?"
-                self.cursor.execute(query, (new_value, garment_id))
+                self.execute_with_retry(query, (new_value, garment_id))
                 self.conn.commit()
                 return True, None
+                
         except Exception as e:
-            self.conn.rollback()  # Rollback on error
+            print(f"Error updating garment: {str(e)}")  # Debug print
             return False, str(e)
             
+    def get_garment_by_id(self, garment_id):
+        """Get a single garment by its ID."""
+        try:
+            query = "SELECT * FROM garments WHERE id = ?"
+            df = pd.read_sql_query(query, self.conn, params=(garment_id,))
+            return None if df.empty else df.iloc[0].to_dict()  # Return as dictionary
+        except sqlite3.Error as e:
+            print(f"Error retrieving garment: {e}")
+            return None
+            
+    def update_image_url(self, garment_id, new_image_url):
+        """Update image URL for a specific garment with proper validation."""
+        try:
+            # Start transaction
+            self.conn.execute("BEGIN EXCLUSIVE TRANSACTION")
+            
+            try:
+                # Clear any cached queries that might contain this garment
+                self._cache.clear()
+                
+                # Get current garment data including old image URL
+                current_garment = self.get_garment_by_id(garment_id)
+                if current_garment is None:
+                    self.conn.rollback()
+                    return False, "Garment not found"
+                
+                # Store old image path for cleanup
+                old_image_url = current_garment.get('image_url')
+                
+                # Execute update with retry
+                query = "UPDATE garments SET image_url = ? WHERE id = ?"
+                self.execute_with_retry(query, (new_image_url, garment_id))
+                
+                # Force commit to ensure changes are written
+                self.conn.commit()
+                
+                # Verify the update was successful
+                verify_query = "SELECT image_url FROM garments WHERE id = ?"
+                self.cursor.execute(verify_query, (garment_id,))
+                result = self.cursor.fetchone()
+                
+                if result and result[0] == new_image_url:
+                    # Clean up old image if it exists and is different
+                    if old_image_url and old_image_url != new_image_url and old_image_url.startswith('static/'):
+                        try:
+                            old_image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), old_image_url)
+                            if os.path.exists(old_image_path):
+                                os.remove(old_image_path)
+                        except Exception as e:
+                            print(f"Warning: Failed to delete old image {old_image_url}: {e}")
+                    
+                    return True, None
+                else:
+                    self.conn.rollback()
+                    return False, "Failed to verify update"
+                    
+            except Exception as e:
+                self.conn.rollback()
+                return False, str(e)
+                
+        except Exception as e:
+            if 'BEGIN EXCLUSIVE TRANSACTION' in str(e):
+                return False, "Database is locked, please try again"
+            return False, str(e)
+
     def bulk_update_garment(self, garment_id, updates):
         """Update multiple fields for a specific garment in one transaction."""
         try:
@@ -358,36 +514,56 @@ class GarmentDatabase:
             if invalid_fields:
                 raise ValueError(f"Invalid field names: {', '.join(invalid_fields)}")
             
-            # Build the update query
-            set_clause = ", ".join([f"{field} = ?" for field in updates.keys()])
-            query = f"UPDATE garments SET {set_clause} WHERE id = ?"
+            # Special handling for image URL
+            if 'image_url' in updates:
+                success, error = self.update_image_url(garment_id, updates['image_url'])
+                if not success:
+                    return False, f"Image URL update failed: {error}"
+                del updates['image_url']  # Remove from general updates
+                
+            if not updates:  # If only image_url was updated or no updates
+                return True, None
+                
+            # Handle remaining updates
+            # Start transaction
+            self.conn.execute("BEGIN EXCLUSIVE TRANSACTION")
             
-            # Execute the update with all values plus the ID
-            values = list(updates.values()) + [garment_id]
-            self.cursor.execute(query, values)
-            self.conn.commit()
-            return True, None
+            try:
+                # Get current values to check for actual changes
+                current_values = self.get_garment_by_id(garment_id)
+                if current_values is None:
+                    raise ValueError(f"No garment found with ID {garment_id}")
+                
+                # Filter out unchanged values and prepare updates
+                real_updates = {k: v for k, v in updates.items() 
+                              if current_values[k] != v}
+                
+                if not real_updates:
+                    self.conn.rollback()
+                    return True, None  # No changes needed
+                
+                # Build and execute the update query
+                set_clause = ", ".join([f"{field} = ?" for field in real_updates.keys()])
+                query = f"UPDATE garments SET {set_clause} WHERE id = ?"
+                
+                values = list(real_updates.values()) + [garment_id]
+                self.execute_with_retry(query, values)
+                
+                # Verify the update
+                updated_values = self.get_garment_by_id(garment_id)
+                if all(updated_values[k] == v for k, v in real_updates.items()):
+                    self.conn.commit()
+                    return True, None
+                else:
+                    self.conn.rollback()
+                    return False, "Update verification failed"
+                    
+            except Exception as e:
+                self.conn.rollback()
+                raise e
+                
         except Exception as e:
-            self.conn.rollback()  # Rollback on error
+            if 'BEGIN EXCLUSIVE TRANSACTION' in str(e):
+                return False, "Database is locked, please try again"
             return False, str(e)
-            
-    def get_garment_by_id(self, garment_id):
-        """Get a single garment by its ID."""
-        try:
-            query = "SELECT * FROM garments WHERE id = ?"
-            result = pd.read_sql_query(query, self.conn, params=(garment_id,))
-            return None if result.empty else result.iloc[0]
-        except sqlite3.Error as e:
-            print(f"Error retrieving garment: {e}")
-            return None
-
-
-# For testing purposes
-if __name__ == "__main__":
-    db = GarmentDatabase()
-    print("All garments:")
-    print(db.get_all_garments())
-    print("\nCategories:")
-    print(db.get_all_categories())
-    db.close()
 

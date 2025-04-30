@@ -1,65 +1,73 @@
 import os
 import google.generativeai as genai
-from dotenv import load_dotenv
+import tomli
 
-load_dotenv()
+def load_secrets():
+    """Load secrets from secrets.toml file."""
+    try:
+        with open('secrets.toml', 'rb') as f:
+            return tomli.load(f)
+    except Exception as e:
+        raise ValueError(f"Failed to load secrets.toml: {str(e)}")
 
 class GeminiChatbot:
     def __init__(self):
+        # Try to get API key from environment first
         api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY not set in environment variables")
         
-        # Validate API key format
-        if not isinstance(api_key, str) or not api_key.startswith('AI'):
-            raise ValueError("Invalid GEMINI_API_KEY format. Key should be a string starting with 'AI'")
+        # If not in environment, try to load from secrets.toml
+        if not api_key:
+            try:
+                import tomli
+                with open('secrets.toml', 'rb') as f:
+                    secrets = tomli.load(f)
+                    api_key = secrets.get('gemini_api_key')
+            except Exception as e:
+                print(f"Error loading secrets.toml: {e}")
+                
+        if not api_key:
+            raise ValueError(
+                "GEMINI_API_KEY not found. Please either:\n"
+                "1. Set it as an environment variable, or\n"
+                "2. Add it to secrets.toml as gemini_api_key"
+            )
             
         try:
             genai.configure(api_key=api_key)
             
-            # Test the API key by making a simple request
-            test_model = genai.GenerativeModel('gemini-2.0-flash')
-            test_model.generate_content("test")
-        except Exception as e:
-            raise ValueError(f"Failed to initialize Gemini API: {str(e)}")
-        
-        # Configure the model
-        generation_config = {
-            "temperature": float(os.getenv("GEMINI_TEMPERATURE", 0.7)),
-            "top_p": float(os.getenv("GEMINI_TOP_P", 0.8)),
-            "top_k": int(os.getenv("GEMINI_TOP_K", 40)),
-            "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", 2048)),
-        }
-        
-        # Initialize the model with proper safety settings
-        safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-        ]
-        
-        try:
+            # Optimize configuration for faster responses
+            generation_config = {
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 20,  # Reduced from 40
+                "max_output_tokens": 1024,  # Reduced from 2048
+                "candidate_count": 1  # Explicitly request single response
+            }
+            
+            # Simplified safety settings for faster processing
+            safety_settings = [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                }
+            ]
+            
             self.model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash-preview-04-17",
+                model_name="gemini-2.5-flash-preview-04-17",  # Updated to use stable model
                 generation_config=generation_config,
                 safety_settings=safety_settings
             )
             self.chat = self.model.start_chat(history=[])
+            
         except Exception as e:
-            raise ValueError(f"Failed to initialize chat model: {str(e)}")
+            raise ValueError(
+                f"Failed to initialize Gemini chat model. Error: {str(e)}\n"
+                "Please ensure your API key is valid and has the necessary permissions."
+            )
     
     def suggest_garment(self, user_query):
         """

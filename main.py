@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import hashlib
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Import our custom modules
 from db import GarmentDatabase
@@ -14,6 +15,11 @@ import admin_panel
 # Load environment variables
 load_dotenv()
 
+# Set up static file serving
+static_dir = Path(__file__).parent / "static"
+if not static_dir.exists():
+    os.makedirs(static_dir / "images", exist_ok=True)
+
 # Page configuration
 st.set_page_config(
     page_title="Indian Dress Assistant",
@@ -22,8 +28,24 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Create a function to get the full URL for static files
+def get_static_url(path):
+    """Get the full URL for a static file."""
+    return f"static/{path}"
+
 # Initialize session state
-utils.initialize_session_state()
+def initialize_session_state():
+    """Initialize session state variables if they don't exist."""
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "selected_category" not in st.session_state:
+        st.session_state.selected_category = "All"
+    if "garment_data" not in st.session_state:
+        st.session_state.garment_data = None
+    if "response_cache" not in st.session_state:
+        st.session_state.response_cache = {}
+
+initialize_session_state()
 
 # Authentication function
 def check_password():
@@ -102,6 +124,12 @@ st.markdown("""
     .stMarkdown div[data-testid="stMarkdownContainer"] a:hover {
         background-color: #FF3333;
         text-decoration: none;
+    }
+    /* Add to existing CSS */
+    .local-image {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -202,11 +230,15 @@ if page == "Chat Assistant":
         col1, col2 = st.columns([5, 1])
         
         with col1:
-            # Use an empty string as default value
+            # Initialize the session state for user input if not exists
+            if "user_input" not in st.session_state:
+                st.session_state.user_input = ""
+
             user_input = st.text_input(
                 "Type your message here...", 
                 key="user_input",
-                placeholder="e.g., I'm attending an Indian wedding, what should I wear?"
+                placeholder="e.g., I'm attending an Indian wedding, what should I wear?",
+                value=st.session_state.user_input
             )
         
         with col2:
@@ -214,46 +246,50 @@ if page == "Chat Assistant":
 
     # Process user input
     if send_button and user_input:
-        # Add user message to chat history
-        user_message = utils.format_chat_message("user", user_input)
-        st.session_state.chat_history.append(user_message)
+        # Check cache first
+        cache_key = user_input.lower().strip()
+        cached_response = st.session_state.response_cache.get(cache_key)
         
-        # First, get garment suggestions from Gemini
-        suggestion_text, suggested_garments = chatbot.suggest_garment(user_input)
-        
-        # Extract search criteria from user query, including suggested garments
-        search_criteria = chatbot.extract_search_criteria(user_input)
-        
-        # Search database for relevant garments
-        relevant_garments = db.get_garments_by_criteria(search_criteria)
-        
-        # If no direct matches found but we have suggested garments, search for those specifically
-        if relevant_garments.empty and suggested_garments:
-            for garment_type in suggested_garments:
-                # Try to find matches for each suggested garment type
-                garment_matches = db.search_garments(garment_type)
-                if not garment_matches.empty:
-                    relevant_garments = garment_matches
-                    break
-        
-        # Generate response using Gemini
-        if not relevant_garments.empty:
-            # We found matching garments in our database
-            response_text = chatbot.generate_response(user_input, relevant_garments)
+        if cached_response:
+            # Use cached response
+            user_message = utils.format_chat_message("user", user_input)
+            bot_message = utils.format_chat_message("assistant", cached_response)
+            st.session_state.chat_history.extend([user_message, bot_message])
         else:
-            # No matching garments found, use the suggestion with a note
-            response_text = "No matching items found in our collection, but here's a suggestion...\n\n" + suggestion_text
+            # Add user message to chat history
+            user_message = utils.format_chat_message("user", user_input)
+            st.session_state.chat_history.append(user_message)
+            
+            with st.spinner("Thinking..."):
+                # Get garment suggestions from Gemini with a timeout
+                suggestion_text, suggested_garments = chatbot.suggest_garment(user_input)
+                
+                # Extract search criteria and search database in parallel
+                search_criteria = chatbot.extract_search_criteria(user_input)
+                relevant_garments = db.get_garments_by_criteria(search_criteria)
+                
+                # Generate response
+                if not relevant_garments.empty:
+                    response_text = chatbot.generate_response(user_input, relevant_garments)
+                else:
+                    response_text = "No matching items found in our collection, but here's a suggestion...\n\n" + suggestion_text
+                
+                # Cache the response
+                st.session_state.response_cache[cache_key] = response_text
+                
+                # Add bot response to chat history
+                bot_message = utils.format_chat_message("assistant", response_text)
+                st.session_state.chat_history.append(bot_message)
+                
+                # Save to database asynchronously
+                import threading
+                threading.Thread(target=db.save_chat_history, 
+                               args=(user_input, response_text)).start()
         
-        # Add bot response to chat history
-        bot_message = utils.format_chat_message("assistant", response_text)
-        st.session_state.chat_history.append(bot_message)
-        
-        # Save to database
-        db.save_chat_history(user_input, response_text)
-        
-        # Rerun to update UI
+        # Set flag to clear input on next rerun
+        st.session_state.clear_input = True
         st.rerun()
-
+            
     # Display garment results if category is selected
     if st.session_state.selected_category != "All" and st.session_state.garment_data is not None:
         st.subheader(f"Browsing: {st.session_state.selected_category}")

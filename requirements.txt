@@ -1,7 +1,8 @@
 streamlit>=1.24.0
 google-generativeai>=0.3.0
-pandas>=2.0.0
+pandas>=2.1.0
 python-dotenv>=1.0.0
-numpy>=1.24.0
+numpy>=1.26.0
 Pillow>=10.0.0  # For image handling
 requests>=2.31.0  # For URL validation
+pyarrow>=11.0.0  # Added for data_editor compatibility
