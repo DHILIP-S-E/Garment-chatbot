@@ -7,3 +7,4 @@ Pillow>=10.0.0  # For image handling
 requests>=2.31.0  # For URL validation
 pyarrow>=11.0.0  # Added for data_editor compatibility
 tomli>=2.0.1  # For reading TOML configuration files
+pyimgur>=0.8.1  # For image upload handling
