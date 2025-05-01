@@ -124,125 +124,125 @@ class GarmentDatabase:
             # Sarees
             ("Banarasi Silk Saree", "Saree", "Silk", "Free Size", 149.99, True, 
              "Elegant Banarasi silk saree with gold zari work", "Women", "All", 
-             "https://placehold.co/400x500/silk/white/png?text=Banarasi+Silk+Saree", 
+             "D:\images\banarasi silk saree.jpeg", 
              "https://www.amazon.com/banarasi-silk-saree", "North", "Wedding"),
             
             ("Kanjivaram Silk Saree", "Saree", "Silk", "Free Size", 199.99, True, 
              "Traditional South Indian Kanjivaram silk saree with temple border", "Women", "All", 
-             "https://placehold.co/400x500/gold/white/png?text=Kanjivaram+Silk+Saree", 
+             "D:\images\Kanjivaram Silk Saree.jpg", 
              "https://www.amazon.com/kanjivaram-silk-saree", "South", "Wedding"),
             
             ("Cotton Handloom Saree", "Saree", "Cotton", "Free Size", 59.99, True, 
              "Comfortable cotton handloom saree for daily wear", "Women", "Summer", 
-             "https://placehold.co/400x500/lightblue/white/png?text=Cotton+Handloom+Saree", 
+             "D:\images\Cotton Handloom Saree.jpeg", 
              "https://www.amazon.com/cotton-handloom-saree", "East", "Casual"),
             
             ("Georgette Printed Saree", "Saree", "Georgette", "Free Size", 45.99, True, 
              "Lightweight georgette saree with modern prints", "Women", "All", 
-             "https://placehold.co/400x500/pink/white/png?text=Georgette+Printed+Saree", 
+             "D:\images\Georgette Printed Saree.jpeg", 
              "https://www.amazon.com/georgette-printed-saree", "West", "Casual"),
             
             # Lehengas
             ("Bridal Lehenga Choli", "Lehenga", "Velvet", "S,M,L,XL", 299.99, True, 
              "Heavy embroidered bridal lehenga with zari and stonework", "Women", "Winter", 
-             "https://placehold.co/400x500/red/white/png?text=Bridal+Lehenga+Choli", 
+             "D:\images\Bridal Lehenga Choli.jpeg", 
              "https://www.amazon.com/bridal-lehenga-choli", "North", "Wedding"),
             
             ("Silk Lehenga Choli", "Lehenga", "Silk", "S,M,L", 149.99, True, 
              "Festive silk lehenga with golden embroidery", "Women", "All", 
-             "https://placehold.co/400x500/maroon/white/png?text=Silk+Lehenga+Choli", 
+             "D:\images\Silk Lehenga Choli.jpg", 
              "https://www.amazon.com/silk-lehenga-choli", "West", "Festival"),
             
             ("Cotton Chaniya Choli", "Lehenga", "Cotton", "S,M,L,XL", 79.99, True, 
              "Traditional Gujarati style chaniya choli for Navratri", "Women", "All", 
-             "https://placehold.co/400x500/orange/white/png?text=Cotton+Chaniya+Choli", 
+             "D:\images\Cotton Chaniya Choli.jpeg", 
              "https://www.amazon.com/cotton-chaniya-choli", "West", "Festival"),
             
             # Salwar Kameez
             ("Anarkali Salwar Suit", "Salwar Kameez", "Georgette", "S,M,L,XL,XXL", 89.99, True, 
              "Floor length Anarkali suit with embroidered bodice", "Women", "All", 
-             "https://placehold.co/400x500/teal/white/png?text=Anarkali+Salwar+Suit", 
+             "D:\images\Anarkali Salwar Suit.jpg", 
              "https://www.amazon.com/anarkali-salwar-suit", "North", "Party"),
             
             ("Punjabi Patiala Suit", "Salwar Kameez", "Cotton", "S,M,L,XL", 69.99, True, 
              "Traditional Punjabi Patiala suit with printed dupatta", "Women", "Summer", 
-             "https://placehold.co/400x500/yellow/white/png?text=Punjabi+Patiala+Suit", 
+             "D:\images\Punjabi Patiala Suit.jpg", 
              "https://www.amazon.com/punjabi-patiala-suit", "North", "Casual"),
             
             ("Straight Cut Salwar Suit", "Salwar Kameez", "Crepe", "S,M,L,XL", 79.99, True, 
              "Elegant straight cut salwar suit for formal occasions", "Women", "All", 
-             "https://placehold.co/400x500/navy/white/png?text=Straight+Cut+Salwar", 
+             "D:\images\Straight Cut Salwar Suit.jpeg", 
              "https://www.amazon.com/straight-cut-salwar-suit", "North", "Formal"),
             
             # Kurta Pajama (Men)
             ("Silk Kurta Pajama", "Kurta Pajama", "Silk", "38,40,42,44", 89.99, True, 
              "Traditional silk kurta pajama for special occasions", "Men", "All", 
-             "https://placehold.co/400x500/beige/black/png?text=Silk+Kurta+Pajama", 
+             "D:\images\Silk Kurta Pajama.jpeg", 
              "https://www.amazon.com/silk-kurta-pajama", "North", "Wedding"),
             
             ("Cotton Kurta Pajama", "Kurta Pajama", "Cotton", "38,40,42,44,46", 49.99, True, 
              "Comfortable cotton kurta pajama for daily wear", "Men", "Summer", 
-             "https://placehold.co/400x500/white/black/png?text=Cotton+Kurta+Pajama", 
+             "D:\images\Cotton Kurta Pajama.jpg", 
              "https://www.amazon.com/cotton-kurta-pajama", "North", "Casual"),
             
             ("Embroidered Kurta Pajama", "Kurta Pajama", "Cotton Blend", "38,40,42,44", 69.99, True, 
              "Kurta with intricate embroidery for festive occasions", "Men", "All", 
-             "https://placehold.co/400x500/green/white/png?text=Embroidered+Kurta", 
+             "D:\images\Embroidered Kurta Pajama.jpeg", 
              "https://www.amazon.com/embroidered-kurta-pajama", "North", "Festival"),
             
             # Sherwani
             ("Wedding Sherwani", "Sherwani", "Silk", "38,40,42,44", 249.99, True, 
              "Royal wedding sherwani with heavy embroidery", "Men", "Winter", 
-             "https://placehold.co/400x500/darkred/white/png?text=Wedding+Sherwani", 
+             "D:\images\wedding sherwani.jpeg", 
              "https://www.amazon.com/wedding-sherwani", "North", "Wedding"),
             
             ("Indo-Western Sherwani", "Sherwani", "Polyester Blend", "38,40,42,44,46", 149.99, True, 
              "Modern Indo-Western sherwani for reception", "Men", "All", 
-             "https://placehold.co/400x500/gray/white/png?text=Indo+Western+Sherwani", 
+             "D:\images\indo western sherwani.jpeg", 
              "https://www.amazon.com/indo-western-sherwani", "North", "Party"),
             
             # Dhoti
             ("Traditional Dhoti", "Dhoti", "Cotton", "Free Size", 29.99, True, 
              "Pure cotton traditional dhoti", "Men", "All", 
-             "https://placehold.co/400x500/white/black/png?text=Traditional+Dhoti", 
+             "D:\images\Traditional Dhoti.jpeg", 
              "https://www.amazon.com/traditional-dhoti", "South", "Festival"),
             
             ("Silk Dhoti", "Dhoti", "Silk", "Free Size", 39.99, True, 
              "Premium silk dhoti for special occasions", "Men", "All", 
-             "https://placehold.co/400x500/ivory/black/png?text=Silk+Dhoti", 
+             "D:\images\silk dhoti.jpeg", 
              "https://www.amazon.com/silk-dhoti", "South", "Wedding"),
             
             # Nehru Jacket
             ("Silk Nehru Jacket", "Nehru Jacket", "Silk", "38,40,42,44", 79.99, True, 
              "Elegant silk Nehru jacket for formal occasions", "Men", "All", 
-             "https://placehold.co/400x500/black/white/png?text=Silk+Nehru+Jacket", 
+             "D:\images\silk nehru jacket.jpeg", 
              "https://www.amazon.com/silk-nehru-jacket", "North", "Formal"),
             
             ("Printed Nehru Jacket", "Nehru Jacket", "Cotton Blend", "38,40,42,44,46", 59.99, True, 
              "Stylish printed Nehru jacket for festive wear", "Men", "All", 
-             "https://placehold.co/400x500/purple/white/png?text=Printed+Nehru+Jacket", 
+             "D:\images\Printed Nehru Jacket.jpeg" 
              "https://www.amazon.com/printed-nehru-jacket", "North", "Festival"),
             
             # Indo-Western
             ("Indo-Western Gown", "Indo-Western", "Georgette", "S,M,L,XL", 119.99, True, 
              "Fusion Indo-Western gown for reception", "Women", "All", 
-             "https://placehold.co/400x500/rose/white/png?text=Indo+Western+Gown", 
+             "D:\images\Indo-Western Gown.jpeg", 
              "https://www.amazon.com/indo-western-gown", "North", "Party"),
             
             ("Indo-Western Suit", "Indo-Western", "Crepe", "S,M,L,XL", 99.99, True, 
              "Modern Indo-Western suit for women", "Women", "All", 
-             "https://placehold.co/400x500/coral/white/png?text=Indo+Western+Suit", 
+             "D:\images\Indo-Western Suit.jpeg", 
              "https://www.amazon.com/indo-western-suit", "North", "Party"),
             
             # Vesti (South Indian dhoti)
             ("Traditional Vesti", "Vesti", "Cotton", "Free Size", 24.99, True, 
              "Traditional South Indian vesti/dhoti", "Men", "All", 
-             "https://placehold.co/400x500/cream/black/png?text=Traditional+Vesti", 
+             "D:\images\Traditional Vesti.jpeg", 
              "https://www.amazon.com/traditional-vesti", "South", "Festival"),
             
             ("Silk Vesti", "Vesti", "Silk", "Free Size", 34.99, True, 
              "Premium silk vesti for temple visits and special occasions", "Men", "All", 
-             "https://placehold.co/400x500/gold/black/png?text=Silk+Vesti", 
+             "D:\images\silk Vesti.jpeg", 
              "https://www.amazon.com/silk-vesti", "South", "Wedding")
         ]
         
